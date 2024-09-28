@@ -4,6 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const http = require("http");
 const auth = require("./routes/auth");
+const event = require("./routes/events");
 // const redisClient = require("./config/redis");
 // const { initializeSocket } = require('./socket/socket');
 
@@ -27,6 +28,7 @@ const server = http.createServer(app);
 
 // Api routes
 app.use("/api/auth", auth);
+app.use("/api/event", event);
 
 
 //empty redis on server start

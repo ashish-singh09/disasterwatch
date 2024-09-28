@@ -13,42 +13,49 @@ import { Badge } from "@/components/ui/badge"
 import { Plus, Edit, AlertTriangle } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react'
+import { useSession } from 'next-auth/react';
+import axios from 'axios';
+import {backendUrl} from '@/lib/utils';
+import {
+  useQuery,
+} from '@tanstack/react-query'
+
 
 type DisasterEvent = {
-  id: number
+  _id: string
   type: string
   location: string
+  affectedPopulation?: number | string
   coordinates: [number, number] | string
   severity: 'Low' | 'Medium' | 'High'
   description: string
 }
 
 export default function DisasterManagement() {
-  const [events, setEvents] = useState<DisasterEvent[]>([
-    { id: 1, type: 'Earthquake', location: 'San Francisco, USA', coordinates: [13.7563, 100.5018], severity: 'High', description: 'Magnitude 7.1 earthquake' },
-    { id: 2, type: 'Flood', location: 'Bangkok, Thailand', coordinates: [13.7563, 100.5018], severity: 'Medium', description: 'Severe flooding in urban areas' },
-  ])
+  
   const [editingEvent, setEditingEvent] = useState<DisasterEvent | null>(null)
   const [isAddEventDialogOpen, setIsAddEventDialogOpen] = useState(false)
   const [isSOSDialogOpen, setIsSOSDialogOpen] = useState(false)
   const [newEvent, setNewEvent] = useState<Partial<DisasterEvent>>({})
   const [sosMessage, setSOSMessage] = useState({ eventName: '', location: '', message: '' });
 
-  const {push} = useRouter();
+  const { push } = useRouter();
   const { data: session, status } = useSession() as { data: { user: { role: string } } | null, status: string };
-
-  const handleAddEvent = () => {
-    if (newEvent.type && newEvent.location && newEvent.severity) {
-      setEvents([...events, { ...newEvent, id: Date.now() } as DisasterEvent])
-      setNewEvent({})
-      setIsAddEventDialogOpen(false)
-    }
-  }
 
   const handleEditEvent = () => {
     if (editingEvent) {
-      setEvents(events.map(event => event.id === editingEvent.id ? editingEvent : event))
+
+      console.log(editingEvent);
+      
+      
+      axios.put(`${backendUrl}/api/event/update/${editingEvent._id}`, editingEvent)
+        .then(response => {
+          refetch();
+        })
+        .catch(error => {
+          // alert(error);
+          console.error(error);
+        });
       setEditingEvent(null)
     }
   }
@@ -73,17 +80,42 @@ export default function DisasterManagement() {
     }
   }
 
+  const {isPending, refetch, data: eventData} = useQuery<DisasterEvent[]>({
+    queryKey: ['events'],
+    queryFn: async () => {
+      const response = await axios.get(`${backendUrl}/api/event/all`);
+      return response.data;
+    }
+  });
+
+  const handleAddEvent = async () => {
+    if (newEvent.type && newEvent.location && newEvent.severity) {
+      
+      axios.post(`${backendUrl}/api/event/create`, newEvent)
+        .then(response => {
+          refetch();
+
+          setNewEvent({})
+          setIsAddEventDialogOpen(false)
+        })
+        .catch(error => {
+          console.error(error);
+          // alert('Failed to add event');
+        });
+    }
+  }
+
   useEffect(() => {
-    console.log(status, session?.user?.role);
-    
     if (status === 'unauthenticated' || session?.user?.role !== 'admin') {
       push('/');
     }
   }, [status, push, session?.user?.role]);
 
+  
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-100">
-      
+
       <Navbar />
 
       <main className="flex-1">
@@ -116,8 +148,8 @@ export default function DisasterManagement() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {events.map((event) => (
-                    <TableRow key={event.id}>
+                  {eventData?.map((event) => (
+                    <TableRow key={event._id}>
                       <TableCell>{event.type}</TableCell>
                       <TableCell>{event.location}</TableCell>
                       <TableCell>{Array.isArray(event.coordinates) ? event.coordinates.join(', ') : event.coordinates}</TableCell>
@@ -175,9 +207,20 @@ export default function DisasterManagement() {
               </Label>
               <Input
                 id="coordinates"
-                value={newEvent.location || ''}
+                value={newEvent.coordinates?.toString() || ''}
                 placeholder='lat, long (separated by comma)'
-                onChange={(e) => setNewEvent({ ...newEvent, location: e.target.value })}
+                onChange={(e) => setNewEvent({ ...newEvent, coordinates: e.target.value })}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="coordinates" className="text-right">
+                Affected Population
+              </Label>
+              <Input
+                id="affectedPopulation"
+                value={newEvent.affectedPopulation?.toString() || ''}
+                onChange={(e) => setNewEvent({ ...newEvent, affectedPopulation: e.target.value })}
                 className="col-span-3"
               />
             </div>

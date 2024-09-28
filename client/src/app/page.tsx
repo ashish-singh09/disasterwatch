@@ -11,6 +11,9 @@ import { Input } from "@/components/ui/input"
 import { Bell, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
+import { useQuery } from '@tanstack/react-query'
+import { backendUrl } from '@/lib/utils'
+import axios from 'axios'
 
 // For fixing marker icon not showing
 L.Icon.Default.mergeOptions({
@@ -20,7 +23,7 @@ L.Icon.Default.mergeOptions({
 })
 
 type DisasterEvent = {
-  id: number
+  _id: string
   type: string
   location: string
   severity: 'Low' | 'Medium' | 'High'
@@ -29,21 +32,20 @@ type DisasterEvent = {
   lastUpdate: string
 }
 
-const disasterEvents: DisasterEvent[] = [
-  { id: 1, type: 'Earthquake', location: 'San Francisco, USA', severity: 'High', coordinates: [37.7749, -122.4194], affectedPopulation: 870000, lastUpdate: '2 hours ago' },
-  { id: 2, type: 'Flood', location: 'Bangkok, Thailand', severity: 'Medium', coordinates: [13.7563, 100.5018], affectedPopulation: 350000, lastUpdate: '5 hours ago' },
-  { id: 3, type: 'Fire', location: 'Sydney, Australia', severity: 'Low', coordinates: [-33.8688, 151.2093], affectedPopulation: 15000, lastUpdate: '1 day ago' },
-  { id: 4, type: 'Hurricane', location: 'Miami, USA', severity: 'High', coordinates: [25.7617, -80.1918], affectedPopulation: 450000, lastUpdate: '3 hours ago' },
-  { id: 5, type: 'Tsunami', location: 'Tokyo, Japan', severity: 'High', coordinates: [35.6762, 139.6503], affectedPopulation: 1200000, lastUpdate: '1 hour ago' },
-  { id: 5, type: 'Tsunami', location: 'Tokyo, Japan', severity: 'High', coordinates: [28.457949, 77.507159], affectedPopulation: 1200000, lastUpdate: '1 hour ago' },
-]
-
 export default function EnhancedDisasterDashboard() {
   const [selectedEvent, setSelectedEvent] = useState<DisasterEvent | null>(null)
+  const [disasterEvents, setDisasterEvents] = useState<DisasterEvent[] | null>([
+    { _id: "1", type: 'Earthquake', location: 'San Francisco, USA', severity: 'High', coordinates: [37.7749, -122.4194], affectedPopulation: 870000, lastUpdate: '2 hours ago' },
+    { _id: "2", type: 'Flood', location: 'Bangkok, Thailand', severity: 'Medium', coordinates: [13.7563, 100.5018], affectedPopulation: 350000, lastUpdate: '5 hours ago' },
+    { _id: "3", type: 'Fire', location: 'Sydney, Australia', severity: 'Low', coordinates: [-33.8688, 151.2093], affectedPopulation: 15000, lastUpdate: '1 day ago' },
+    { _id: "4", type: 'Hurricane', location: 'Miami, USA', severity: 'High', coordinates: [25.7617, -80.1918], affectedPopulation: 450000, lastUpdate: '3 hours ago' },
+    { _id: "5", type: 'Tsunami', location: 'Tokyo, Japan', severity: 'High', coordinates: [35.6762, 139.6503], affectedPopulation: 1200000, lastUpdate: '1 hour ago' },
+    { _id: "5", type: 'Flood', location: 'Tokyo, Japan', severity: 'High', coordinates: [28.457949, 77.507159], affectedPopulation: 1200000, lastUpdate: '1 hour ago' },
+  ]);
   const [searchTerm, setSearchTerm] = useState('');
   const { push } = useRouter();
 
-  const filteredEvents = disasterEvents.filter(event =>
+  const filteredEvents = disasterEvents?.filter(event =>
     event.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
     event.location.toLowerCase().includes(searchTerm.toLowerCase())
   )
@@ -62,12 +64,25 @@ export default function EnhancedDisasterDashboard() {
   }
 
   const getTotalAffectedPopulation = () => {
-    return disasterEvents.reduce((total, event) => total + event.affectedPopulation, 0).toLocaleString()
+    return disasterEvents?.reduce((total, event) => total + event.affectedPopulation, 0).toLocaleString()
   }
 
   const getActiveDisasters = () => {
-    return disasterEvents.length
+    return disasterEvents?.length
   }
+
+  const { refetch, data: dEvents } = useQuery({
+    queryKey: ['events'],
+    queryFn: async () => {
+      const response = await axios.get(`${backendUrl}/api/event/all`);
+      if (disasterEvents === null) {
+        setDisasterEvents([...response.data]);
+      } else {
+        setDisasterEvents([...disasterEvents, ...response.data]);
+      }
+      return response.data;
+    }
+  });
 
   return (
     <div className="flex flex-col h-screen bg-gray-100">
@@ -128,9 +143,9 @@ export default function EnhancedDisasterDashboard() {
                 </CardHeader>
                 <CardContent className="h-[calc(100vh-400px)] overflow-y-auto">
                   <ul className="space-y-4">
-                    {filteredEvents.map((event) => (
+                    {filteredEvents?.map((event) => (
                       <li
-                        key={event.id}
+                        key={event._id}
                         className="bg-white p-4 rounded-lg shadow cursor-pointer hover:bg-gray-50"
                         onClick={() => setSelectedEvent(event)}
                       >
@@ -157,8 +172,8 @@ export default function EnhancedDisasterDashboard() {
               <Card className="h-[calc(100vh-200px)]">
                 <MapContainer center={[20, 0]} zoom={2} style={{ height: '100%', width: '100%' }}>
                   <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                  {disasterEvents.map((event) => (
-                    <Marker key={event.id} position={event.coordinates}>
+                  {disasterEvents?.map((event: DisasterEvent) => (
+                    <Marker key={event._id} position={event.coordinates}>
                       <Popup>
                         <h3 className="font-semibold">{event.type}</h3>
                         <p>{event.location}</p>
@@ -185,7 +200,7 @@ export default function EnhancedDisasterDashboard() {
             </Badge>
             <p className="mt-2">Affected Population: {selectedEvent.affectedPopulation.toLocaleString()}</p>
             <p>Last Updated: {selectedEvent.lastUpdate}</p>
-            <Button className="mt-4 w-full" onClick={() => push("/details/" + selectedEvent.id)}>View Detailed Report</Button>
+            <Button className="mt-4 w-full" onClick={() => push("/details/" + selectedEvent._id)}>View Detailed Report</Button>
           </div>
         )
       }

@@ -9,9 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
-import { ArrowLeft, HelpCircle, LogIn, Mail } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { useRouter } from "next/navigation";
-import Navbar from '@/components/Navbar'
+import Navbar from '@/components/Navbar';
+import { useQuery } from '@tanstack/react-query'
+import { backendUrl } from '@/lib/utils'
+import axios from 'axios'
 
 
 L.Icon.Default.mergeOptions({
@@ -29,11 +32,11 @@ type DisasterEvent = {
     affectedPopulation: number
     lastUpdate: string
     description: string
-    timeline: { date: string; event: string }[]
-    resources: { type: string; allocated: number; required: number }[]
+    timeline?: { date: string; event: string }[]
+    resources?: { type: string; allocated: number; required: number }[]
 }
 
-const disasterEvent: DisasterEvent = {
+const disasterEventData: DisasterEvent = {
     id: 1,
     type: 'Earthquake',
     location: 'San Francisco, USA',
@@ -76,10 +79,18 @@ export default function Page() {
         }
     }
 
+    // const { isPending, refetch, data: disasterEventData } = useQuery<DisasterEvent>({
+    //     queryKey: ['events'],
+    //     queryFn: async () => {
+    //         const response = await axios.get(`${backendUrl}/api/event/get/:id`);
+    //         return response.data;
+    //     }
+    // });
+
     return (
         <div className="flex flex-col min-h-screen bg-gray-100">
-            
-            
+
+
             <Navbar />
 
             <main className="flex-1">
@@ -96,11 +107,11 @@ export default function Page() {
                             <CardHeader>
                                 <div className="flex justify-between items-start">
                                     <div>
-                                        <CardTitle className="text-2xl">{disasterEvent.type}</CardTitle>
-                                        <p className="text-gray-500">{disasterEvent.location}</p>
+                                        <CardTitle className="text-2xl">{disasterEventData?.type}</CardTitle>
+                                        <p className="text-gray-500">{disasterEventData?.location}</p>
                                     </div>
-                                    <Badge variant="outline" className={`${getSeverityColor(disasterEvent.severity)} text-white`}>
-                                        {disasterEvent.severity} Severity
+                                    <Badge variant="outline" className={`${getSeverityColor(disasterEventData?.severity ?? "Medium")} text-white`}>
+                                        {disasterEventData?.severity} Severity
                                     </Badge>
                                 </div>
                             </CardHeader>
@@ -113,20 +124,20 @@ export default function Page() {
                                     </TabsList>
                                     <TabsContent value="overview">
                                         <div className="space-y-4">
-                                            <p>{disasterEvent.description}</p>
+                                            <p>{disasterEventData?.description}</p>
                                             <div>
                                                 <h3 className="font-semibold">Affected Population</h3>
-                                                <p>{disasterEvent.affectedPopulation.toLocaleString()}</p>
+                                                <p>{disasterEventData?.affectedPopulation.toLocaleString()}</p>
                                             </div>
                                             <div>
                                                 <h3 className="font-semibold">Last Updated</h3>
-                                                <p>{disasterEvent.lastUpdate}</p>
+                                                <p>{disasterEventData?.lastUpdate}</p>
                                             </div>
                                         </div>
                                     </TabsContent>
                                     <TabsContent value="timeline">
                                         <ul className="space-y-4">
-                                            {disasterEvent.timeline.map((item, index) => (
+                                            {disasterEventData?.timeline?.map((item, index) => (
                                                 <li key={index} className="flex items-start">
                                                     <div className="flex-shrink-0 w-12 text-sm text-gray-500">{item.date.split(' ')[1]}</div>
                                                     <div className="ml-4">
@@ -139,7 +150,7 @@ export default function Page() {
                                     </TabsContent>
                                     <TabsContent value="resources">
                                         <ul className="space-y-4">
-                                            {disasterEvent.resources.map((resource, index) => (
+                                            {disasterEventData?.resources?.map((resource, index) => (
                                                 <li key={index}>
                                                     <div className="flex justify-between mb-1">
                                                         <span>{resource.type}</span>
@@ -159,13 +170,13 @@ export default function Page() {
                                 <CardTitle>Location</CardTitle>
                             </CardHeader>
                             <CardContent className="h-[400px]">
-                                <MapContainer center={disasterEvent.coordinates} zoom={10} style={{ height: '100%', width: '100%' }}>
+                                <MapContainer center={disasterEventData?.coordinates} zoom={10} style={{ height: '100%', width: '100%' }}>
                                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                                    <Marker position={disasterEvent.coordinates}>
+                                    <Marker position={disasterEventData?.coordinates ?? [-33.8688, 151.2093]}>
                                         <Popup>
-                                            <h3 className="font-semibold">{disasterEvent.type}</h3>
-                                            <p>{disasterEvent.location}</p>
-                                            <p>Severity: {disasterEvent.severity}</p>
+                                            <h3 className="font-semibold">{disasterEventData?.type}</h3>
+                                            <p>{disasterEventData?.location}</p>
+                                            <p>Severity: {disasterEventData?.severity}</p>
                                         </Popup>
                                     </Marker>
                                 </MapContainer>

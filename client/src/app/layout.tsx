@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import AuthSessionProvider from "@/components/SessionProvider";
+import TanstackProvider from "@/app/provider/tanstack"
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -20,7 +21,9 @@ export default function RootLayout({
       <body className={inter.className}>
 
         <AuthSessionProvider>
-          {children}
+          <TanstackProvider>
+            {children}
+          </TanstackProvider>
         </AuthSessionProvider>
 
       </body>

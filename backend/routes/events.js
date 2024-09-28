@@ -1,10 +1,15 @@
 const { Router } = require('express');
 const router = Router();
 
-const { signIn, getProfile } = require('../controller/auth.controller');
+const { createEvent, getEvents, editEvent, getEvent } = require('../controller/event.controller');
 
 
-router.post('/login', signIn);
-router.post('/profile', getProfile);
+router.post('/create', createEvent);
+
+router.get('/all', getEvents);
+
+router.get('/get/:id', getEvent);
+
+router.put('/update/:id', editEvent);
 
 module.exports = router;
