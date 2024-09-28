@@ -1,203 +1,124 @@
-from flask import Flask, render_template
+from flask import Flask, jsonify
 import requests
-import feedparser
-import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup
 import os
 from dotenv import load_dotenv
-from urllib.parse import urlparse, urlunparse
-from textblob import TextBlob
+import feedparser
+#from flask_cors import CORS  # Import CORS
 
-# Load environment variables
-load_dotenv()
-
+# Create the Flask app
 app = Flask(__name__)
 
-# Use environment variable for the API key
-NEWS_API_KEY = os.getenv('NEWS_API_KEY')
+# Enable CORS for all routes
+#CORS(app)
 
-# Function to clean up URLs
+# Load environment variables from .env file (if needed)
+load_dotenv()
+
+# Severity classification based on keywords
+HIGH_SEVERITY_KEYWORDS = ['earthquake', 'fatal', 'evacuate', 'flood', 'explosion', 'massive', 'deadly', 'collapse']
+MEDIUM_SEVERITY_KEYWORDS = ['damage', 'fire', 'landslide', 'storm', 'disruption', 'destroy', 'rescue']
+
 def clean_url(url):
-    parsed_url = urlparse(url)
-    return urlunparse(parsed_url._replace(query='', fragment=''))  # Remove query and fragment
+    # Function to clean up URLs
+    url = url.replace("http://", "").replace("https://", "").replace("www.", "").split('/')[0]
+    return url
 
-# Function to analyze sentiment
-def analyze_sentiment(text):
-    if text:
-        blob = TextBlob(text)
-        return blob.sentiment.polarity, blob.sentiment.subjectivity  # Polarity: [-1, 1], Subjectivity: [0, 1]
-    return 0, 0  # Default sentiment for empty text
+def analyze_severity(text):
+    """
+    Function to analyze the severity of a disaster news title or description.
+    The severity is classified into:
+    - 'High' if keywords indicating high severity are found.
+    - 'Medium' if keywords indicating medium severity are found.
+    - 'Low' if neither high nor medium severity keywords are found.
+    """
+    text = text.lower()  # Convert text to lowercase for easier keyword matching
 
-def classify_severity(polarity):
-    """Classify the severity based on polarity."""
-    if polarity >= 0.5:
-        return "High Severity"
-    elif 0.1 <= polarity < 0.5:
-        return "Moderate Severity"
-    else:
-        return "Minimum Severity"
+    # Check for high severity keywords
+    if any(keyword in text for keyword in HIGH_SEVERITY_KEYWORDS):
+        return 'High'
     
-def is_disaster_article(text):
-    """Check if the article text contains information indicative of an actual disaster."""
-    disaster_keywords = ["disaster", "flood", "earthquake", "cyclone", "landslide", "hurricane", "wildfire", "tsunami"]
-    return any(keyword in text.lower() for keyword in disaster_keywords)
-
-# --------- News API --------- #
-def fetch_news_api(api_key):
-    query = 'disaster OR flood OR earthquake OR cyclone OR landslide OR wildfire OR tsunami OR hurricane OR tornado OR drought OR volcanic eruption OR heatwave OR mudslide'
-    url = f"https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&apiKey={api_key}"
-
-    response = requests.get(url)
-    if response.status_code == 200:
-        news_data = response.json()
-        articles = news_data.get('articles', [])
-        results = []
-        for article in articles:
-            text = article.get('description', '') or article.get('content', '')
-            if is_disaster_article(text):  # Filter for actual disaster-related news
-                polarity, subjectivity = analyze_sentiment(text)
-                severity = classify_severity(polarity) 
-                article['sentiment_polarity'] = polarity
-                article['sentiment_subjectivity'] = subjectivity
-                article['severity'] = severity 
-                results.append({
-                    "title": article['title'],
-                    "url": clean_url(article['url']), 
-                    "sentiment_polarity": polarity, 
-                    "sentiment_subjectivity": subjectivity,
-                    "severity": severity
-                })
-        return results
-    else:
-        print(f"Error fetching News API: {response.status_code}")
-        return []
-
-# --------- GDACS API --------- #
-#   def fetch_gdacs():
-    url = "https://www.gdacs.org/xml/feed.aspx?event=all"
-    response = requests.get(url)
-
-    if response.status_code == 200:
-        # Parse XML response
-        root = ET.fromstring(response.content)
-        results = []
-        for event in root.findall('Event'):
-            title = event.find('Title').text
-            link = event.find('Link').text
-            severity = event.find('Severity').text if event.find('Severity') is not None else "Unknown"
-            polarity, subjectivity = analyze_sentiment(title)  
-            severity_classification = classify_severity(polarity)
-
-            results.append({
-                "title": title,
-                "url": link,
-                "sentiment_polarity": polarity,
-                "sentiment_subjectivity": subjectivity,
-                "severity": severity_classification
-            })
-        return results
-    else:
-        print(f"Error fetching GDACS: {response.status_code}")
-        return []
+    # Check for medium severity keywords
+    elif any(keyword in text for keyword in MEDIUM_SEVERITY_KEYWORDS):
+        return 'Medium'
     
-# --------- Google News RSS --------- #
+    # If no keywords match, classify as low severity
+    else:
+        return 'Low'
+
+# Example: Fetch news from a specific news API (can be modified as per your data sources)
+def fetch_news_api():
+    api_key = os.getenv('NEWS_API_KEY')  # Load API key from .env
+    url = f"https://newsapi.org/v2/everything?q=disaster&apiKey={api_key}"
+    response = requests.get(url)
+    news_data = response.json().get('articles', [])
+    
+    news_list = []
+    for article in news_data:
+        news_item = {
+            "title": article['title'],
+            "source": clean_url(article['url']),
+            "url": article['url'],
+            "severity": analyze_severity(article['title'])  # Analyzing severity instead of sentiment
+        }
+        news_list.append(news_item)
+    return news_list
+
+# Example: Fetch Google News RSS feed (can add more sources here)
 def fetch_google_news_rss():
-    rss_url = "https://news.google.com/rss/search?q=disaster&hl=en-IN&gl=IN&ceid=IN:en"
-    try:
-        feed = feedparser.parse(rss_url)
-
-        results = []
-        for entry in feed.entries:
-            text = entry.summary or entry.content[0].value
-            if is_disaster_article(text):  # Filter for actual disaster-related news
-                polarity, subjectivity = analyze_sentiment(text)
-                severity = classify_severity(polarity) 
-                results.append({
-                    "title": entry.title,
-                    "url": clean_url(entry.link),
-                    "sentiment_polarity": polarity,
-                    "sentiment_subjectivity": subjectivity,
-                    "severity": severity 
-                }) 
-        return results
-    except Exception as e:
-        print(f"Error fetching Google RSS: {e}")
-        return []
-
-# --------- ReliefWeb API --------- #
-def fetch_reliefweb():
-    url = "https://api.reliefweb.int/v1/reports?appname=apidoc&query[value]=disaster"
-    response = requests.get(url)
+    feed_url = "https://news.google.com/rss/search?q=disaster"
+    feed = feedparser.parse(feed_url)
     
-    if response.status_code == 200:
-        disaster_data = response.json()
-        results = []
-        for report in disaster_data.get('data', []):
-            title = report['fields'].get('title', 'No Title')
-            url = clean_url(report['fields'].get('url', 'No URL Available'))  
-            polarity, subjectivity = analyze_sentiment(title) 
-            severity = classify_severity(polarity)  # Classify severity
-            if is_disaster_article(title):  # Filter for actual disaster-related news
-                results.append({
-                    "title": title,
-                    "url": url,
-                    "sentiment_polarity": polarity,
-                    "sentiment_subjectivity": subjectivity,
-                    "severity": severity  
-                })
-        return results
-    else:
-        print(f"Error fetching ReliefWeb: {response.status_code}")
-        return []
+    news_list = []
+    for entry in feed.entries:
+        news_item = {
+            "title": entry.title,
+            "source": clean_url(entry.link),
+            "url": entry.link,
+            "severity": analyze_severity(entry.title)  # Analyzing severity instead of sentiment
+        }
+        news_list.append(news_item)
+    return news_list
 
-# --------- Scraping NDTV  --------- #
-# def scrape_ndtv():
-    url = "https://www.ndtv.com/india"
-    try:
-        response = requests.get(url)
-        soup = BeautifulSoup(response.text, 'html.parser')
+# Example: Scrape disaster news from NDTV
+def scrape_ndtv():
+    url = "https://www.ndtv.com/topic/disaster"
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    news_list = []
+    articles = soup.find_all('div', class_='news_Itm-cont')
+    
+    for article in articles:
+        title = article.find('a').get_text()
+        link = article.find('a')['href']
+        news_item = {
+            "title": title,
+            "source": clean_url(link),
+            "url": link,
+            "severity": analyze_severity(title)  # Analyzing severity instead of sentiment
+        }
+        news_list.append(news_item)
+    return news_list
 
-        results = []
-        for item in soup.find_all('h2', class_='newsHdng'):
-            link = item.find('a')
-            text = item.text.strip()
-            if link and is_disaster_article(text): 
-                polarity, subjectivity = analyze_sentiment(text)
-                severity = classify_severity(polarity)  # Classify severity
-                results.append({
-                    "title": text,
-                    "url": clean_url(link['href']),
-                    "sentiment_polarity": polarity,
-                    "sentiment_subjectivity": subjectivity,
-                    "severity": severity 
-                })
-        return results
-    except Exception as e:
-        print(f"Error scraping NDTV: {e}")
-        return []
+# API Endpoint to serve disaster news as JSON
+@app.route('/api/disaster-news', methods=['GET'])
+def disaster_news():
+    """
+    API endpoint to return disaster news with severity classification as JSON data.
+    - Gathers news from multiple sources (news API, Google RSS, and NDTV).
+    - Analyzes the severity of each news title (high, medium, low).
+    """
+    all_news = []
 
-# --------- Route to Fetch All Disaster News --------- #
-@app.route('/disaster-news', methods=['GET'])
-def get_disaster_news():
-    # Fetch data from all sources
-    news_api_data = fetch_news_api(NEWS_API_KEY)
-    google_news_data = fetch_google_news_rss()
-    reliefweb_data = fetch_reliefweb()
-    ndtv_data = scrape_ndtv()
-    # gdacs_data = fetch_gdacs()
+    # Fetch news from various sources
+    all_news.extend(fetch_news_api())
+    all_news.extend(fetch_google_news_rss())
+    all_news.extend(scrape_ndtv())
 
-    # Combine all data into a single list
-    all_news = {
-        "News API": news_api_data,
-        "Google News": google_news_data,
-        # "GDACS": gdacs_data,
-        "ReliefWeb": reliefweb_data,
-        # "NDTV": ndtv_data
+    # Return the results as JSON
+    return jsonify(all_news)
 
-    }
-
-    return render_template('news.html', all_news=all_news)
-
-# --------- Run the Flask App --------- #
 if __name__ == '__main__':
+    # Run the Flask app on localhost:5000
     app.run(debug=True)
